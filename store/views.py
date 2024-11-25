@@ -5,32 +5,42 @@ import datetime
 from .models import *
 # Create your views here.
 def store(request):
+    if request.user.is_authenticated:
+        customer = request.user.customer
+        # Fetch the most recent incomplete order for the customer
+        order = Order.objects.filter(customer=customer, complete=False).order_by('-date_ordered').first()
 
-	if request.user.is_authenticated:
-		customer = request.user.customer
-		order, created = Order.objects.get_or_create(customer=customer, complete=False)
-		item = order.orderitem_set.all()
-		cartItems = order.get_cart_item
-	else:
-		#Create empty cart for now for non-logged in user
-		items = []
-		order = {'get_cart_total':0, 'get_cart_items':0}
-		cartItems = order['get_cart_items']
+        # If no order exists, create one
+        if not order:
+            order = Order.objects.create(customer=customer, complete=False)
 
-	products = Product.objects.all()
-	context = {'products':products, 'cartItems':cartItems}
-	return render(request, 'store/store.html', context)
+        items = order.orderitem_set.all()
+        cartItems = order.get_cart_item
+    else:
+        # Create an empty cart for non-authenticated users
+        items = []
+        order = {'get_cart_total': 0, 'get_cart_items': 0}
+        cartItems = 0
 
+    products = Product.objects.all()
+    context = {'products': products, 'cartItems': cartItems}
+    return render(request, 'store/store.html', context)
 
 
 def cart(request):
     if request.user.is_authenticated:
         customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
+        # Fetch the most recent incomplete order
+        order = Order.objects.filter(customer=customer, complete=False).order_by('-date_ordered').first()
+
+        # If no order exists, create a new one
+        if not order:
+            order = Order.objects.create(customer=customer, complete=False)
+
         items = order.orderitem_set.all()
-        cartItems = order.get_cart_items()
+        cartItems = order.get_cart_item
     else:
-        # Create empty cart for non-logged-in users
+        # Handle non-authenticated users (guest cart)
         try:
             cart = json.loads(request.COOKIES.get('cart', '{}'))
         except json.JSONDecodeError:
@@ -41,21 +51,16 @@ def cart(request):
         order = {'get_cart_total': 0, 'get_cart_items': 0, 'shipping': False}
         cartItems = 0
 
-        # Process items in the guest cart
         for i in cart:
             try:
-                # Increment cart item count
                 cartItems += cart[i]['quantity']
 
-                # Fetch product details
                 product = Product.objects.get(id=i)
                 total = product.price * cart[i]['quantity']
 
-                # Update order totals
                 order['get_cart_total'] += total
                 order['get_cart_items'] += cart[i]['quantity']
 
-                # Create an item dictionary
                 item = {
                     'id': product.id,
                     'product': {
@@ -70,11 +75,9 @@ def cart(request):
                 }
                 items.append(item)
 
-                # Update shipping requirement
                 if not product.digital:
                     order['shipping'] = True
             except Product.DoesNotExist:
-                # Handle case where product ID does not exist in the database
                 print(f"Product with ID {i} does not exist.")
                 continue
 
