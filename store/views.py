@@ -1,26 +1,84 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 import json
+import datetime
 from .models import *
 # Create your views here.
 def store(request):
-    products = Product.objects.all()
-    context = {'products': products}
-    return render(request, 'store/store.html', context)
+
+	if request.user.is_authenticated:
+		customer = request.user.customer
+		order, created = Order.objects.get_or_create(customer=customer, complete=False)
+		item = order.orderitem_set.all()
+		cartItems = order.get_cart_item
+	else:
+		#Create empty cart for now for non-logged in user
+		items = []
+		order = {'get_cart_total':0, 'get_cart_items':0}
+		cartItems = order['get_cart_items']
+
+	products = Product.objects.all()
+	context = {'products':products, 'cartItems':cartItems}
+	return render(request, 'store/store.html', context)
+
 
 
 def cart(request):
-
     if request.user.is_authenticated:
         customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer= customer, complete = False)
+        order, created = Order.objects.get_or_create(customer=customer, complete=False)
         items = order.orderitem_set.all()
+        cartItems = order.get_cart_items()
     else:
-        #create empty cart for now for none0logged in users
-        items = []
-        order = {'get_cart_total':0, 'get_cart_items':0}
+        # Create empty cart for non-logged-in users
+        try:
+            cart = json.loads(request.COOKIES.get('cart', '{}'))
+        except json.JSONDecodeError:
+            cart = {}
+            print('CART:', cart)
 
-    context = {'items':items, 'order':order}
+        items = []
+        order = {'get_cart_total': 0, 'get_cart_items': 0, 'shipping': False}
+        cartItems = 0
+
+        # Process items in the guest cart
+        for i in cart:
+            try:
+                # Increment cart item count
+                cartItems += cart[i]['quantity']
+
+                # Fetch product details
+                product = Product.objects.get(id=i)
+                total = product.price * cart[i]['quantity']
+
+                # Update order totals
+                order['get_cart_total'] += total
+                order['get_cart_items'] += cart[i]['quantity']
+
+                # Create an item dictionary
+                item = {
+                    'id': product.id,
+                    'product': {
+                        'id': product.id,
+                        'name': product.name,
+                        'price': product.price,
+                        'imageURL': product.imageURL,
+                    },
+                    'quantity': cart[i]['quantity'],
+                    'digital': product.digital,
+                    'get_total': total,
+                }
+                items.append(item)
+
+                # Update shipping requirement
+                if not product.digital:
+                    order['shipping'] = True
+            except Product.DoesNotExist:
+                # Handle case where product ID does not exist in the database
+                print(f"Product with ID {i} does not exist.")
+                continue
+
+    context = {'items': items, 'order': order, 'cartItems': cartItems}
     return render(request, 'store/cart.html', context)
 
 def checkout(request):
@@ -52,3 +110,29 @@ def updateItem(request):
 		orderItem.delete()
 
 	return JsonResponse('Item was added', safe=False)
+
+def processOrder(request):
+    transaction_id = datetime.datetime.now().timestamp()
+    data = json.loads(request.body)
+
+    if request.user.is_authenticated:
+        customer = request.user.customer
+        order, created = Order.objects.get_or_create(customer=customer, complete=False)
+        total = float(data['form']['total'])
+        order.transaction_id = transaction_id
+
+        if total == order.get_cart_total():
+            order.complete = True
+            order.save()
+
+        if order.shipping:
+            ShippingAddress.objects.create(
+                customer=customer,
+                order=order,
+                address=data['shipping']['address'],
+                city=data['shipping']['city'],
+                state=data['shipping']['state'],
+                zipcode=data['shipping']['zipcode'],
+            )
+
+    return JsonResponse('Payment submitted...', safe=False)

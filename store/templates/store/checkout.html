@@ -83,6 +83,131 @@
         console.log('Form Submitted...')
         document.getElementById('form-button').classList.add("hidden");
         document.getElementById('payment-info').classList.remove("hidden");
+
+        
     })
+
+    if (user != 'AnonymousUser'){
+ 	document.getElementById('user-info').innerHTML = ''
+ }
+
+if (shipping == 'False' && user != 'AnonymousUser'){
+	//Hide entire form if user is logged in and shipping is false
+		document.getElementById('form-wrapper').classList.add("hidden");
+		//Show payment if logged in user wants to buy an item that does not require shipping
+	    document.getElementById('payment-info').classList.remove("hidden");
+}
+var total = '{{order.get_cart_total|floatformat:2}}'
+
+function submitFormData(){
+	console.log('Payment button clicked')
+
+	var userFormData = {
+		'name':null,
+		'email':null,
+		'total':total,
+	}
+
+	var shippingInfo = {
+		'address':null,
+		'city':null,
+		'state':null,
+		'zipcode':null,
+	}
+
+	if (shipping != 'False'){
+		shippingInfo.address = form.address.value
+    	shippingInfo.city = form.city.value
+    	shippingInfo.state = form.state.value
+    	shippingInfo.zipcode = form.zipcode.value
+	}
+
+	if (user == 'AnonymousUser'){
+		userFormData.name = form.name.value
+		userFormData.email = form.email.value
+	}
+
+	console.log('Shipping Info:', shippingInfo)
+	console.log('User Info:', userFormData)
+}
+
+function submitFormData(){
+	console.log('Payment button clicked')
+
+	var userFormData = {
+		'name':null,
+		'email':null,
+		'total':total,
+	}
+
+	var shippingInfo = {
+		'address':null,
+		'city':null,
+		'state':null,
+		'zipcode':null,
+	}
+
+	if (shipping != 'False'){
+		shippingInfo.address = form.address.value
+    	shippingInfo.city = form.city.value
+    	shippingInfo.state = form.state.value
+    	shippingInfo.zipcode = form.zipcode.value
+	}
+
+	if (user == 'AnonymousUser'){
+		userFormData.name = form.name.value
+		userFormData.email = form.email.value
+	}
+
+	console.log('Shipping Info:', shippingInfo)
+	console.log('User Info:', userFormData)
+
+	var url = "/process_order/"
+	fetch(url, {
+		method:'POST',
+		headers:{
+			'Content-Type':'applicaiton/json',
+			'X-CSRFToken':csrftoken,
+		}, 
+		body:JSON.stringify({'form':userFormData, 'shipping':shippingInfo}),
+		
+	})
+	.then((response) => response.json())
+	.then((data) => {
+		  console.log('Success:', data);
+		  alert('Transaction completed');  
+		  window.location.href = "{% url 'store' %}"
+
+		})
+}
+function getCookie(name) {
+    // Split cookie string and get all individual name=value pairs in an array
+    var cookieArr = document.cookie.split(";");
+
+    // Loop through the array elements
+    for(var i = 0; i < cookieArr.length; i++) {
+        var cookiePair = cookieArr[i].split("=");
+
+        /* Removing whitespace at the beginning of the cookie name
+        and compare it with the given string */
+        if(name == cookiePair[0].trim()) {
+            // Decode the cookie value and return
+            return decodeURIComponent(cookiePair[1]);
+        }
+    }
+
+    // Return null if not found
+    return null;
+}
+var cart = JSON.parse(getCookie('cart'))
+
+if (cart == undefined){
+	cart = {}
+	console.log('Cart Created!', cart)
+	document.cookie ='cart=' + JSON.stringify(cart) + ";domain=;path=/"
+}
+console.log('Cart:', cart)
 </script>
+
+
 {% endblock content %}
